@@ -160,17 +160,19 @@
       const vid = document.getElementById(vidId);
       const plane = document.getElementById(planeId);
 
-      vid.addEventListener('loadedmetadata', () => {
-        // aspect = ancho original / alto original
-        const aspect = vid.videoWidth / vid.videoHeight;
-        // Ponemos ancho = aspect, alto = 1; luego escalamos uniformemente
-        plane.setAttribute('width', aspect);
-        plane.setAttribute('height', 1);
-        plane.setAttribute('scale', `${scaleFactor} ${scaleFactor} ${scaleFactor}`);
-        // Y un pequeño offset en Z para evitar solapamientos
-        plane.setAttribute('position', `0 0 0.02`);
-      });
-    });
+vid.addEventListener('loadedmetadata', () => {
+  const aspect = vid.videoWidth / vid.videoHeight;
+
+  // Normalizamos para que el alto siempre sea 1 unidad
+  plane.setAttribute('height', 1);
+  plane.setAttribute('width', aspect);
+
+  // Aplicamos un escalado general, sin deformar proporción
+  plane.object3D.scale.set(scaleFactor, scaleFactor, scaleFactor);
+
+  // Pequeño offset Z para evitar solapamientos
+  plane.setAttribute('position', '0 0 0.02');
+});
 
     // 3) Sistema de suavizado para reducir vibraciones
     AFRAME.registerComponent('smooth-position', {
@@ -318,6 +320,94 @@
         '<i class="fas fa-volume-mute"></i>' : 
         '<i class="fas fa-volume-up"></i>';
     });
+
+    // Función para cargar video con proporción automática
+function createVideoPlaneWithAspectRatio(videoElement, scale = 1) {
+    return new Promise((resolve, reject) => {
+        // Esperar a que el video cargue los metadatos
+        videoElement.addEventListener('loadedmetadata', () => {
+            const videoWidth = videoElement.videoWidth;
+            const videoHeight = videoElement.videoHeight;
+            const aspectRatio = videoWidth / videoHeight;
+            
+            // Crear textura de video
+            const videoTexture = new THREE.VideoTexture(videoElement);
+            videoTexture.minFilter = THREE.LinearFilter;
+            videoTexture.magFilter = THREE.LinearFilter;
+            
+            // Crear geometría con proporción correcta
+            // Mantener altura fija y ajustar el ancho según aspect ratio
+            const height = scale;
+            const width = height * aspectRatio;
+            
+            const geometry = new THREE.PlaneGeometry(width, height);
+            const material = new THREE.MeshBasicMaterial({
+                map: videoTexture,
+                side: THREE.DoubleSide
+            });
+            
+            const plane = new THREE.Mesh(geometry, material);
+            
+            resolve({
+                plane: plane,
+                aspectRatio: aspectRatio,
+                dimensions: { width, height }
+            });
+        });
+        
+        videoElement.addEventListener('error', (e) => {
+            reject(e);
+        });
+    });
+}
+
+// Uso en tu código AR
+AFRAME.registerComponent('video-aspect-ratio', {
+    schema: {
+        src: { type: 'string' },
+        scale: { type: 'number', default: 1 }
+    },
+    
+    init: async function() {
+        const videoEl = document.createElement('video');
+        videoEl.src = this.data.src;
+        videoEl.crossOrigin = 'anonymous';
+        videoEl.loop = true;
+        videoEl.muted = true;
+        videoEl.playsInline = true;
+        
+        try {
+            const { plane, aspectRatio, dimensions } = 
+                await createVideoPlaneWithAspectRatio(videoEl, this.data.scale);
+            
+            this.el.setObject3D('mesh', plane);
+            
+            // Guardar referencia al video
+            this.videoEl = videoEl;
+            
+            console.log(`Video cargado: ${dimensions.width}x${dimensions.height}, aspect ratio: ${aspectRatio}`);
+            
+            // Auto-play cuando se detecte el marcador
+            this.el.addEventListener('targetFound', () => {
+                videoEl.play();
+            });
+            
+            this.el.addEventListener('targetLost', () => {
+                videoEl.pause();
+            });
+            
+        } catch (error) {
+            console.error('Error cargando video:', error);
+        }
+    },
+    
+    remove: function() {
+        if (this.videoEl) {
+            this.videoEl.pause();
+            this.videoEl.src = '';
+        }
+    }
+});
   </script>
 </body>
 </html>
