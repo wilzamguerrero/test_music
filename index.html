@@ -128,11 +128,11 @@
       </video>
       
       <!-- Máscaras en blanco y negro -->
-      <img id="mask0" src="https://cdn.jsdelivr.net/gh/wilzamguerrero/test_music@main/assets/mask0.png" crossorigin="anonymous">
-      <img id="mask1" src="https://cdn.jsdelivr.net/gh/wilzamguerrero/test_music@main/assets/mask1.png" crossorigin="anonymous">
+      <img id="mask0" src="https://cdn.jsdelivr.net/gh/wilzamguerrero/test_music@main/assets/mask1b.jpg" crossorigin="anonymous">
+      <img id="mask1" src="https://cdn.jsdelivr.net/gh/wilzamguerrero/test_music@main/assets/mask1b.jpg" crossorigin="anonymous">
       
       <!-- Imágenes PNG para marcos/overlays -->
-      <img id="frame0" src="https://cdn.jsdelivr.net/gh/wilzamguerrero/test_music@main/assets/frame0.png" crossorigin="anonymous">
+      <img id="frame0" src="https://cdn.jsdelivr.net/gh/wilzamguerrero/test_music@main/assets/frame1.png" crossorigin="anonymous">
       <img id="frame1" src="https://cdn.jsdelivr.net/gh/wilzamguerrero/test_music@main/assets/frame1.png" crossorigin="anonymous">
     </a-assets>
 
@@ -141,7 +141,7 @@
     <!-- Marcador 0 -->
     <a-entity id="target0" mindar-image-target="targetIndex: 0">
       <!-- Video con máscara aplicada -->
-      <a-video id="plane0" src="#video0" video-mask="mask: #mask0"></a-video>
+      <a-plane id="plane0" src="#video0" video-mask="mask: #mask0"></a-plane>
       <!-- Imagen PNG delante del video (marco/overlay) -->
       <a-image id="overlay0" src="#frame0" material="transparent: true; alphaTest: 0.5"></a-image>
     </a-entity>
@@ -149,7 +149,7 @@
     <!-- Marcador 1 -->
     <a-entity id="target1" mindar-image-target="targetIndex: 1">
       <!-- Video con máscara aplicada -->
-      <a-video id="plane1" src="#video1" video-mask="mask: #mask1"></a-video>
+      <a-plane id="plane1" src="#video1" video-mask="mask: #mask1"></a-plane>
       <!-- Imagen PNG delante del video (marco/overlay) -->
       <a-image id="overlay1" src="#frame1" material="transparent: true; alphaTest: 0.5"></a-image>
     </a-entity>
@@ -167,33 +167,42 @@
       },
 
       init: function() {
-        this.applyMask();
-      },
-
-      applyMask: function() {
         const el = this.el;
         const maskImg = this.data.mask;
 
-        if (maskImg.complete) {
-          this.createMaskedMaterial();
-        } else {
-          maskImg.addEventListener('load', () => {
-            this.createMaskedMaterial();
-          });
-        }
+        // Esperar a que el componente esté listo
+        el.addEventListener('loaded', () => {
+          this.setupMask();
+        });
       },
 
-      createMaskedMaterial: function() {
+      setupMask: function() {
         const el = this.el;
         const maskImg = this.data.mask;
         
-        const maskTexture = new THREE.Texture(maskImg);
+        // Obtener el video element
+        const videoSrc = el.getAttribute('src');
+        const video = document.querySelector(videoSrc);
+
+        // Crear textura de máscara
+        const maskTexture = new THREE.TextureLoader().load(maskImg.src);
         maskTexture.needsUpdate = true;
 
-        el.addEventListener('materialtextureloaded', () => {
-          const videoTexture = el.getObject3D('mesh').material.map;
-          
-          const maskedMaterial = new THREE.ShaderMaterial({
+        // Crear textura de video
+        const videoTexture = new THREE.VideoTexture(video);
+        videoTexture.minFilter = THREE.LinearFilter;
+        videoTexture.magFilter = THREE.LinearFilter;
+
+        // Esperar a que el mesh esté disponible
+        setTimeout(() => {
+          const mesh = el.getObject3D('mesh');
+          if (!mesh) {
+            console.error('No se encontró el mesh');
+            return;
+          }
+
+          // Crear material con shader personalizado
+          const material = new THREE.ShaderMaterial({
             uniforms: {
               videoTexture: { value: videoTexture },
               maskTexture: { value: maskTexture }
@@ -213,15 +222,24 @@
               void main() {
                 vec4 videoColor = texture2D(videoTexture, vUv);
                 vec4 maskColor = texture2D(maskTexture, vUv);
+                
+                // Usar el canal rojo de la máscara como alfa
+                // Blanco (1.0) = visible, Negro (0.0) = transparente
                 float alpha = maskColor.r;
-                gl_FragColor = vec4(videoColor.rgb, videoColor.a * alpha);
+                
+                gl_FragColor = vec4(videoColor.rgb, alpha);
               }
             `,
-            transparent: true
+            transparent: true,
+            side: THREE.DoubleSide
           });
 
-          el.getObject3D('mesh').material = maskedMaterial;
-        });
+          // Aplicar el material
+          mesh.material = material;
+          mesh.material.needsUpdate = true;
+
+          console.log('Máscara aplicada correctamente');
+        }, 100);
       }
     });
 
