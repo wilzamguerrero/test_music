@@ -133,10 +133,13 @@
     
     <!-- Marcador 0 -->
     <a-entity id="target0" mindar-image-target="targetIndex: 0">
-      <!-- Video con máscara aplicada -->
-      <a-plane id="plane0" src="#video0" video-mask="mask: #mask0"></a-plane>
-      <!-- Imagen PNG delante del video (marco/overlay) -->
-      <a-image id="overlay0" src="#frame0" material="transparent: true; alphaTest: 0.5"></a-image>
+      <!-- Grupo para la rotación -->
+      <a-entity id="markerGroup0">
+        <!-- Video con máscara aplicada -->
+        <a-plane id="plane0" src="#video0" video-mask="mask: #mask0"></a-plane>
+        <!-- Imagen PNG delante del video (marco/overlay) -->
+        <a-image id="overlay0" src="#frame0" material="transparent: true; alphaTest: 0.5"></a-image>
+      </a-entity>
     </a-entity>
   </a-scene>
 
@@ -248,21 +251,35 @@
         planeId: 'plane0', 
         overlayId: 'overlay0',
         targetId: 'target0',
-        
-        // 🎯 ESCALA GLOBAL DEL MARCADOR (ajusta todo junto)
-        globalScale: 3,         // Escala TODO el contenido del marcador
-        
-        // Escala individual del video (relativa a globalScale)
-        videoScale: 1.32,         // Escala del video
-        
-        // Configuración del overlay/marco
-        overlayScale: 1.4,        // Escala del marco (relativa al video)
-        overlayPositionZ: 0.05,    // Distancia Z del marco (parallax)
+        markerGroupId: 'markerGroup0',
 
-        // NUEVO: Configuración de la máscara
+        // Global
+        globalScale: 3,
+        globalPositionX: 0,
+        globalPositionY: 0,
+        globalPositionZ: 0,
+        
+        // Video
+        videoScale: 1.32,
+        videoPositionX: 0,
+        videoPositionY: 0,
+        videoPositionZ: -0.02,
+        
+        // Frame/Overlay
+        overlayScale: 1.4,
+        framePositionX: 0,
+        framePositionY: 0,
+        framePositionZ: 0.05,
+        
+        // Mask
         maskScale: 1.06,
         maskPositionX: 0,
-        maskPositionY: 0
+        maskPositionY: 0,
+
+        // Rotation
+        rotationMin: 0,
+        rotationMax: 9,
+        rotationSpeed: 0.2
       }
     ];
 
@@ -270,29 +287,38 @@
     let activeVideoId = null;
 
     // Configuración de videos, máscaras y overlays
-    configs.forEach(({ vidId, planeId, overlayId, targetId, globalScale, videoScale, overlayScale, overlayPositionZ }) => {
-      const vid = document.getElementById(vidId);
-      const plane = document.getElementById(planeId);
-      const overlay = document.getElementById(overlayId);
-      const target = document.getElementById(targetId);
+    configs.forEach((config) => {
+      const vid = document.getElementById(config.vidId);
+      const plane = document.getElementById(config.planeId);
+      const overlay = document.getElementById(config.overlayId);
+      const target = document.getElementById(config.targetId);
+      const markerGroup = document.getElementById(config.markerGroupId);
 
       vid.addEventListener('loadedmetadata', () => {
         const aspect = vid.videoWidth / vid.videoHeight;
         
-        // 🎬 Configurar VIDEO con escala individual
+        // Configurar VIDEO
         plane.setAttribute('width', aspect);
         plane.setAttribute('height', 1);
-        plane.setAttribute('scale', `${videoScale} ${videoScale} ${videoScale}`);
-        plane.setAttribute('position', `0 0 0.02`);
+        plane.setAttribute('scale', `${config.videoScale} ${config.videoScale} ${config.videoScale}`);
+        plane.setAttribute('position', `${config.videoPositionX} ${config.videoPositionY} ${config.videoPositionZ}`);
         
-        // 🖼️ Configurar OVERLAY (marco) con escala relativa al video
+        // Configurar OVERLAY (marco)
         overlay.setAttribute('width', aspect);
         overlay.setAttribute('height', 1);
-        overlay.setAttribute('scale', `${overlayScale} ${overlayScale} ${overlayScale}`);
-        overlay.setAttribute('position', `0 0 ${overlayPositionZ}`);
+        overlay.setAttribute('scale', `${config.overlayScale} ${config.overlayScale} ${config.overlayScale}`);
+        overlay.setAttribute('position', `${config.framePositionX} ${config.framePositionY} ${config.framePositionZ}`);
         
-        // 🌍 Aplicar ESCALA GLOBAL al marcador completo (escala todo junto)
-        target.setAttribute('scale', `${globalScale} ${globalScale} ${globalScale}`);
+        // Aplicar ESCALA y POSICIÓN GLOBAL al grupo
+        markerGroup.setAttribute('scale', `${config.globalScale} ${config.globalScale} ${config.globalScale}`);
+        markerGroup.setAttribute('position', `${config.globalPositionX} ${config.globalPositionY} ${config.globalPositionZ}`);
+
+        // Aplicar ROTACIÓN
+        markerGroup.setAttribute('oscillate-rotation', {
+          min: config.rotationMin,
+          max: config.rotationMax,
+          speed: config.rotationSpeed
+        });
       });
     });
 
@@ -316,6 +342,31 @@
         this.targetPosition.copy(this.el.object3D.position);
         this.smoothedPosition.lerp(this.targetPosition, this.data.factor);
         this.el.object3D.position.copy(this.smoothedPosition);
+      }
+    });
+
+    // NUEVO: Componente para rotación oscilante
+    AFRAME.registerComponent('oscillate-rotation', {
+      schema: {
+        min: { type: 'number', default: 0 },
+        max: { type: 'number', default: 360 },
+        speed: { type: 'number', default: 1 }
+      },
+      init: function() {
+        this.direction = 1;
+        this.minRad = (this.data.min * Math.PI) / 180;
+        this.maxRad = (this.data.max * Math.PI) / 180;
+        this.el.object3D.rotation.y = this.minRad;
+      },
+      tick: function() {
+        const speed = this.data.speed * 0.002;
+        this.el.object3D.rotation.y += speed * this.direction;
+
+        if (this.el.object3D.rotation.y >= this.maxRad) {
+          this.direction = -1;
+        } else if (this.el.object3D.rotation.y <= this.minRad) {
+          this.direction = 1;
+        }
       }
     });
 
