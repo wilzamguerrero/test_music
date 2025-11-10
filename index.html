@@ -172,7 +172,7 @@
         // Crear textura de máscara
         const maskTexture = new THREE.TextureLoader().load(maskImg.src);
         maskTexture.needsUpdate = true;
-
+        
         // Crear textura de video
         const videoTexture = new THREE.VideoTexture(video);
         videoTexture.minFilter = THREE.LinearFilter;
@@ -186,11 +186,18 @@
             return;
           }
 
+          // Obtener la configuración de este marcador
+          const config = configs.find(c => c.planeId === el.id);
+          if (!config) return;
+
           // Crear material con shader personalizado
           const material = new THREE.ShaderMaterial({
             uniforms: {
               videoTexture: { value: videoTexture },
-              maskTexture: { value: maskTexture }
+              maskTexture: { value: maskTexture },
+              // NUEVO: Pasar uniforms de escala y posición
+              maskScale: { value: config.maskScale },
+              maskOffset: { value: new THREE.Vector2(config.maskPositionX, config.maskPositionY) }
             },
             vertexShader: `
               varying vec2 vUv;
@@ -202,14 +209,19 @@
             fragmentShader: `
               uniform sampler2D videoTexture;
               uniform sampler2D maskTexture;
+              uniform float maskScale;
+              uniform vec2 maskOffset;
               varying vec2 vUv;
               
               void main() {
                 vec4 videoColor = texture2D(videoTexture, vUv);
-                vec4 maskColor = texture2D(maskTexture, vUv);
                 
-                // Usar el canal rojo de la máscara como alfa
-                // Blanco (1.0) = visible, Negro (0.0) = transparente
+                // Aplicar escala y posición a la máscara
+                vec2 centeredUv = vUv - 0.5;
+                vec2 scaledUv = (centeredUv / maskScale) + 0.5;
+                vec2 finalUv = scaledUv - maskOffset;
+                
+                vec4 maskColor = texture2D(maskTexture, finalUv);
                 float alpha = maskColor.r;
                 
                 gl_FragColor = vec4(videoColor.rgb, alpha);
@@ -223,7 +235,7 @@
           mesh.material = material;
           mesh.material.needsUpdate = true;
 
-          console.log('Máscara aplicada correctamente');
+          console.log('Máscara aplicada correctamente para el marcador');
         }, 100);
       }
     });
@@ -245,7 +257,12 @@
         
         // Configuración del overlay/marco
         overlayScale: 1.4,        // Escala del marco (relativa al video)
-        overlayPositionZ: 0.05    // Distancia Z del marco (parallax)
+        overlayPositionZ: 0.05,    // Distancia Z del marco (parallax)
+
+        // NUEVO: Configuración de la máscara
+        maskScale: 1.06,
+        maskPositionX: 0,
+        maskPositionY: 0
       }
     ];
 
