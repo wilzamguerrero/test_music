@@ -127,12 +127,12 @@
              preload="auto" loop playsinline webkit-playsinline crossorigin="anonymous">
       </video>
       
-      <!-- Máscaras en blanco y negro (blanco = visible, negro = oculto) -->
-      <img id="mask0" src="https://cdn.jsdelivr.net/gh/wilzamguerrero/test_music@main/assets/mask1.png" crossorigin="anonymous">
+      <!-- Máscaras en blanco y negro -->
+      <img id="mask0" src="https://cdn.jsdelivr.net/gh/wilzamguerrero/test_music@main/assets/mask0.png" crossorigin="anonymous">
       <img id="mask1" src="https://cdn.jsdelivr.net/gh/wilzamguerrero/test_music@main/assets/mask1.png" crossorigin="anonymous">
       
-      <!-- Imágenes PNG para marcos/overlays (delante del video) -->
-      <img id="frame0" src="https://cdn.jsdelivr.net/gh/wilzamguerrero/test_music@main/assets/frame1.png" crossorigin="anonymous">
+      <!-- Imágenes PNG para marcos/overlays -->
+      <img id="frame0" src="https://cdn.jsdelivr.net/gh/wilzamguerrero/test_music@main/assets/frame0.png" crossorigin="anonymous">
       <img id="frame1" src="https://cdn.jsdelivr.net/gh/wilzamguerrero/test_music@main/assets/frame1.png" crossorigin="anonymous">
     </a-assets>
 
@@ -174,7 +174,6 @@
         const el = this.el;
         const maskImg = this.data.mask;
 
-        // Esperar a que la máscara se cargue
         if (maskImg.complete) {
           this.createMaskedMaterial();
         } else {
@@ -188,15 +187,12 @@
         const el = this.el;
         const maskImg = this.data.mask;
         
-        // Crear textura de máscara
         const maskTexture = new THREE.Texture(maskImg);
         maskTexture.needsUpdate = true;
 
-        // Esperar a que el material del video esté listo
         el.addEventListener('materialtextureloaded', () => {
           const videoTexture = el.getObject3D('mesh').material.map;
           
-          // Crear material personalizado con máscara
           const maskedMaterial = new THREE.ShaderMaterial({
             uniforms: {
               videoTexture: { value: videoTexture },
@@ -217,70 +213,87 @@
               void main() {
                 vec4 videoColor = texture2D(videoTexture, vUv);
                 vec4 maskColor = texture2D(maskTexture, vUv);
-                
-                // Usar el canal rojo de la máscara como alfa
-                // Blanco (1.0) = visible, Negro (0.0) = transparente
                 float alpha = maskColor.r;
-                
                 gl_FragColor = vec4(videoColor.rgb, videoColor.a * alpha);
               }
             `,
             transparent: true
           });
 
-          // Aplicar el material personalizado
           el.getObject3D('mesh').material = maskedMaterial;
         });
       }
     });
 
-    // 1) Configuración de escala individual para videos, máscaras y overlays
+    // ✨ CONFIGURACIÓN COMPLETA CON ESCALA GLOBAL POR MARCADOR ✨
     const configs = [
       { 
+        // MARCADOR 0
         vidId: 'video0', 
         planeId: 'plane0', 
         overlayId: 'overlay0',
-        scaleFactor: 1.32,
-        overlayScale: 1.4,        // Escala del marco/overlay (más grande que el video)
-        overlayPositionZ: 0.05    // Posición Z del overlay (más cerca de la cámara = parallax)
+        targetId: 'target0',
+        
+        // 🎯 ESCALA GLOBAL DEL MARCADOR (ajusta todo junto)
+        globalScale: 1.2,         // Escala TODO el contenido del marcador
+        
+        // Escala individual del video (relativa a globalScale)
+        videoScale: 1.32,         // Escala del video
+        
+        // Configuración del overlay/marco
+        overlayScale: 1.4,        // Escala del marco (relativa al video)
+        overlayPositionZ: 0.05    // Distancia Z del marco (parallax)
       },
       { 
+        // MARCADOR 1
         vidId: 'video1', 
         planeId: 'plane1',
-        overlayId: 'overlay1', 
-        scaleFactor: 0.8,
-        overlayScale: 1.2,        // Escala del marco/overlay
-        overlayPositionZ: 0.08    // Posición Z del overlay (efecto parallax más pronunciado)
+        overlayId: 'overlay1',
+        targetId: 'target1',
+        
+        // 🎯 ESCALA GLOBAL DEL MARCADOR
+        globalScale: 0.9,         // Más pequeño que el marcador 0
+        
+        // Escala individual del video
+        videoScale: 0.8,
+        
+        // Configuración del overlay/marco
+        overlayScale: 0.9,
+        overlayPositionZ: 0.08
       }
     ];
 
-    // Variable para seguir el video activo actualmente
+    // Variable para seguir el video activo
     let activeVideoId = null;
 
-    // 2) Al cargar metadatos, establecemos proporción y escalado
-    configs.forEach(({ vidId, planeId, overlayId, scaleFactor, overlayScale, overlayPositionZ }) => {
+    // Configuración de videos, máscaras y overlays
+    configs.forEach(({ vidId, planeId, overlayId, targetId, globalScale, videoScale, overlayScale, overlayPositionZ }) => {
       const vid = document.getElementById(vidId);
       const plane = document.getElementById(planeId);
       const overlay = document.getElementById(overlayId);
+      const target = document.getElementById(targetId);
 
       vid.addEventListener('loadedmetadata', () => {
         const aspect = vid.videoWidth / vid.videoHeight;
         
-        // Configurar VIDEO con máscara
+        // 🎬 Configurar VIDEO con escala individual
         plane.setAttribute('width', aspect);
         plane.setAttribute('height', 1);
-        plane.setAttribute('scale', `${scaleFactor} ${scaleFactor} ${scaleFactor}`);
+        plane.setAttribute('scale', `${videoScale} ${videoScale} ${videoScale}`);
         plane.setAttribute('position', `0 0 0.02`);
         
-        // Configurar OVERLAY (imagen PNG delante)
+        // 🖼️ Configurar OVERLAY (marco) con escala relativa al video
         overlay.setAttribute('width', aspect);
         overlay.setAttribute('height', 1);
         overlay.setAttribute('scale', `${overlayScale} ${overlayScale} ${overlayScale}`);
         overlay.setAttribute('position', `0 0 ${overlayPositionZ}`);
+        
+        // 🌍 Aplicar ESCALA GLOBAL al marcador completo (escala todo junto)
+        target.setAttribute('scale', `${globalScale} ${globalScale} ${globalScale}`);
       });
     });
 
-    // 3) Sistema de suavizado para reducir vibraciones
+    // Sistema de suavizado
     AFRAME.registerComponent('smooth-position', {
       schema: {
         factor: { type: 'number', default: 0.1 }
@@ -297,14 +310,13 @@
 
       tick: function() {
         if (!this.el.object3D.visible) return;
-
         this.targetPosition.copy(this.el.object3D.position);
         this.smoothedPosition.lerp(this.targetPosition, this.data.factor);
         this.el.object3D.position.copy(this.smoothedPosition);
       }
     });
 
-    // 4) Cuando la escena arranca, vinculamos comportamientos
+    // Inicialización de la escena
     document.querySelector('a-scene').addEventListener('renderstart', () => {
       document.querySelectorAll('[mindar-image-target]').forEach(target => {
         target.setAttribute('smooth-position', 'factor: 0.1');
@@ -329,7 +341,7 @@
       });
     });
 
-    // Activar audio automáticamente sin botón
+    // Activar audio automáticamente
     document.addEventListener('DOMContentLoaded', () => {
       setTimeout(() => {
         configs.forEach(({vidId}) => {
@@ -339,7 +351,7 @@
       }, 1000);
     });
 
-    // Gestionar la animación de intro
+    // Gestionar animación de intro
     document.addEventListener('DOMContentLoaded', () => {
       const introContainer = document.getElementById('intro-container');
       const controlButtons = document.getElementById('control-buttons');
@@ -350,7 +362,7 @@
       }, 4000);
     });
 
-    // Función para obtener el video activo actual
+    // Función para obtener el video activo
     function getActiveVideo() {
       if (!activeVideoId) {
         for (let i = 0; i < configs.length; i++) {
@@ -364,7 +376,7 @@
       return activeVideoId ? document.getElementById(activeVideoId) : null;
     }
 
-    // Función para actualizar estados de botones según el video actual
+    // Actualizar estados de botones
     function updateButtonStates() {
       const activeVideo = getActiveVideo();
       if (!activeVideo) return;
@@ -380,7 +392,7 @@
         '<i class="fas fa-volume-up"></i>';
     }
 
-    // Manejadores para los botones de control
+    // Manejadores de botones
     document.getElementById('play-pause-btn').addEventListener('click', function() {
       const activeVideo = getActiveVideo();
       if (!activeVideo) return;
